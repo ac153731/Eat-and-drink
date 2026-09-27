@@ -1,0 +1,597 @@
+<!DOCTYPE html>
+<html lang="zh-TW" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>智能菜單辨識與分帳計算器</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            50: '#eef2ff',
+                            100: '#e0e7ff',
+                            500: '#6366f1',
+                            600: '#4f46e5',
+                            700: '#4338ca',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Fonts Inter -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .glass-panel {
+            background: rgba(30, 41, 59, 0.7);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: rgba(15, 23, 42, 0.5);
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: rgba(99, 102, 241, 0.3);
+            border-radius: 9999px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+            background: rgba(99, 102, 241, 0.6);
+        }
+    </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen flex flex-col antialiased selection:bg-indigo-500 selection:text-white">
+
+    <!-- Header Section -->
+    <header class="border-b border-slate-800 bg-slate-900/80 sticky top-0 z-50 backdrop-blur-md">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-xl bg-indigo-600/20 border border-indigo-500/30 flex items-center justify-center text-indigo-400 font-bold text-xl shadow-lg shadow-indigo-500/10">
+                    <i class="fa-solid fa-receipt"></i>
+                </div>
+                <div>
+                    <h1 class="font-bold text-lg text-slate-100 leading-tight">智能菜單算帳寶</h1>
+                    <p class="text-xs text-slate-400">AI 圖像識別與即時點餐分帳器</p>
+                </div>
+            </div>
+            <div class="flex items-center gap-2">
+                <button id="demoBtn" class="px-3 py-1.5 rounded-lg bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-500/30 text-xs font-medium transition flex items-center gap-1.5 shadow-sm">
+                    <i class="fa-solid fa-wand-magic-sparkles"></i> 載入範例菜單
+                </button>
+                <button id="resetAllBtn" class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium transition flex items-center gap-1.5 border border-slate-700">
+                    <i class="fa-solid fa-rotate-left"></i> 重設
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Container -->
+    <main class="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8 grid grid-cols-1 lg:grid-cols-12 gap-6">
+        
+        <!-- Left Panel: Upload / Image Preview with Interactive OCR bounding boxes -->
+        <section class="lg:col-span-5 flex flex-col gap-4">
+            <div class="glass-panel rounded-2xl p-4 sm:p-5 flex flex-col h-full min-h-[420px]">
+                <div class="flex items-center justify-between mb-3">
+                    <h2 class="font-semibold text-sm sm:text-base text-slate-200 flex items-center gap-2">
+                        <i class="fa-solid fa-camera text-indigo-400"></i> 菜單影像掃描
+                    </h2>
+                    <span id="ocrStatusBadge" class="hidden px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                        <i class="fa-solid fa-circle-check mr-1"></i> 已提取品項
+                    </span>
+                </div>
+
+                <!-- Upload Drag-and-Drop Area -->
+                <div id="dropZone" class="relative flex-1 border-2 border-dashed border-slate-700 hover:border-indigo-500/60 rounded-xl bg-slate-900/40 hover:bg-slate-900/80 transition-all cursor-pointer flex flex-col items-center justify-center p-6 text-center group overflow-hidden min-h-[280px]">
+                    <input type="file" id="fileInput" accept="image/*" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10">
+                    
+                    <!-- Placeholder UI when no image is loaded -->
+                    <div id="uploadPlaceholder" class="flex flex-col items-center justify-center gap-3 transition group-hover:scale-105">
+                        <div class="w-16 h-16 rounded-2xl bg-slate-800 border border-slate-700 flex items-center justify-center text-indigo-400 text-2xl shadow-inner">
+                            <i class="fa-solid fa-cloud-arrow-up"></i>
+                        </div>
+                        <div>
+                            <p class="text-sm font-medium text-slate-200">拖曳菜單照片至此，或 <span class="text-indigo-400">點擊上傳</span></p>
+                            <p class="text-xs text-slate-500 mt-1">支援 JPG, PNG, WEBP (自動解析名稱與價格)</p>
+                        </div>
+                    </div>
+
+                    <!-- Image & Bounding Boxes Preview -->
+                    <div id="previewContainer" class="hidden absolute inset-0 w-full h-full p-2 bg-slate-950 flex items-center justify-center">
+                        <div class="relative w-full h-full flex items-center justify-center overflow-hidden">
+                            <img id="menuImage" class="max-w-full max-h-full object-contain rounded-lg" alt="Menu Preview" />
+                            <div id="ocrOverlay" class="absolute inset-0 pointer-events-none"></div>
+                        </div>
+                    </div>
+
+                    <!-- Loading / Processing Spinner -->
+                    <div id="loadingOverlay" class="hidden absolute inset-0 bg-slate-950/80 backdrop-blur-sm flex flex-col items-center justify-center z-20 gap-3">
+                        <div class="relative w-12 h-12">
+                            <div class="w-12 h-12 rounded-full border-2 border-indigo-500/20 border-t-indigo-500 animate-spin"></div>
+                            <i class="fa-solid fa-sparkles absolute inset-0 flex items-center justify-center text-indigo-400 text-sm"></i>
+                        </div>
+                        <p class="text-sm font-medium text-indigo-300 animate-pulse">正在進行 AI 光學字元辨識 (OCR)...</p>
+                    </div>
+                </div>
+
+                <!-- Custom OCR Query / Manual AI Helper -->
+                <div class="mt-4 pt-3 border-t border-slate-800/80 flex items-center justify-between text-xs text-slate-400">
+                    <span><i class="fa-solid fa-circle-info text-slate-500 mr-1"></i> 上傳後可直接在右側進行微調或手動新增品項</span>
+                </div>
+            </div>
+        </section>
+
+        <!-- Right Panel: Extracted Items & Split Calculator -->
+        <section class="lg:col-span-7 flex flex-col gap-5">
+            
+            <!-- Order Items & Quantities Table -->
+            <div class="glass-panel rounded-2xl p-4 sm:p-5 flex flex-col">
+                <div class="flex items-center justify-between mb-4 flex-wrap gap-2">
+                    <div>
+                        <h2 class="font-semibold text-base text-slate-100 flex items-center gap-2">
+                            <i class="fa-solid fa-list-check text-indigo-400"></i> 菜單明細與數量點選
+                        </h2>
+                        <p class="text-xs text-slate-400 mt-0.5">點擊加減號即時計算消費總額</p>
+                    </div>
+                    <button id="addItemBtn" class="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-medium transition flex items-center gap-1.5 shadow-md shadow-indigo-600/20">
+                        <i class="fa-solid fa-plus"></i> 新增品項
+                    </button>
+                </div>
+
+                <!-- Items Table / Container -->
+                <div class="overflow-x-auto custom-scrollbar max-h-[340px] border border-slate-800 rounded-xl bg-slate-900/50">
+                    <table class="w-full text-left text-xs sm:text-sm">
+                        <thead class="bg-slate-800/80 text-slate-400 uppercase font-medium sticky top-0 z-10 text-[11px] tracking-wider border-b border-slate-700/60">
+                            <tr>
+                                <th class="py-2.5 px-3">餐點名稱</th>
+                                <th class="py-2.5 px-3 w-28">單價 ($)</th>
+                                <th class="py-2.5 px-3 w-32 text-center">點餐數量</th>
+                                <th class="py-2.5 px-3 w-24 text-right">小計</th>
+                                <th class="py-2.5 px-3 w-12 text-center">操作</th>
+                            </tr>
+                        </thead>
+                        <tbody id="itemsTableBody" class="divide-y divide-slate-800/60 text-slate-200 font-normal">
+                            <!-- Rows will be injected dynamically -->
+                        </tbody>
+                    </table>
+                    
+                    <!-- Empty State -->
+                    <div id="emptyItemsState" class="py-12 flex flex-col items-center justify-center text-slate-500 gap-2">
+                        <i class="fa-solid fa-utensils text-2xl"></i>
+                        <p class="text-xs">尚無餐點資料，請上傳菜單圖片或點擊「載入範例菜單」</p>
+                    </div>
+                </div>
+
+                <!-- Subtotal & Additional Charges -->
+                <div class="mt-4 pt-3 border-t border-slate-800 grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div class="bg-slate-900/60 p-2.5 rounded-lg border border-slate-800">
+                        <label class="block text-[11px] text-slate-400 mb-1">服務費 / 折扣</label>
+                        <select id="serviceChargeSelect" class="w-full bg-slate-950 border border-slate-700 rounded-md px-2 py-1 text-xs text-slate-200 focus:outline-none focus:border-indigo-500">
+                            <option value="0">免服務費 (0%)</option>
+                            <option value="0.1">10% 服務費</option>
+                            <option value="0.15">15% 服務費</option>
+                            <option value="-0.05">95 折 (扣 5%)</option>
+                            <option value="-0.1">9 折 (扣 10%)</option>
+                        </select>
+                    </div>
+
+                    <div class="bg-slate-900/60 p-2.5 rounded-lg border border-slate-800">
+                        <label class="block text-[11px] text-slate-400 mb-1">外加運費/開瓶費 ($)</label>
+                        <input type="number" id="extraFeeInput" value="0" min="0" class="w-full bg-slate-950 border border-slate-700 rounded-md px-2 py-1 text-xs text-slate-200 focus:outline-none focus:border-indigo-500">
+                    </div>
+
+                    <div class="bg-indigo-950/30 p-2.5 rounded-lg border border-indigo-900/40 flex flex-col justify-between">
+                        <span class="text-[11px] text-indigo-300 font-medium">餐點小計</span>
+                        <div class="text-right">
+                            <span class="text-xs text-indigo-400">$</span>
+                            <span id="subtotalDisplay" class="text-lg font-bold text-indigo-200">0</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Bill Splitting & Final Total -->
+            <div class="glass-panel rounded-2xl p-4 sm:p-5 flex flex-col bg-gradient-to-br from-slate-900/80 to-slate-900/40">
+                <div class="flex items-center justify-between mb-3">
+                    <h2 class="font-semibold text-base text-slate-100 flex items-center gap-2">
+                        <i class="fa-solid fa-users text-indigo-400"></i> 分帳計算機 (Split Bill)
+                    </h2>
+                    <div class="flex items-center gap-2 bg-slate-950 px-3 py-1 rounded-lg border border-slate-800">
+                        <i class="fa-solid fa-user-group text-xs text-slate-400"></i>
+                        <span class="text-xs text-slate-400">用餐人數:</span>
+                        <input type="number" id="peopleCountInput" value="1" min="1" max="99" class="w-12 bg-transparent text-center font-bold text-sm text-indigo-400 focus:outline-none">
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-2">
+                    <!-- Grand Total Display Card -->
+                    <div class="bg-gradient-to-r from-indigo-900/40 to-slate-900/60 p-4 rounded-xl border border-indigo-500/20 flex flex-col justify-center">
+                        <span class="text-xs text-indigo-300 font-medium">結帳總金額 (含附加費)</span>
+                        <div class="text-2xl sm:text-3xl font-extrabold text-white mt-1">
+                            <span class="text-indigo-400 text-xl">$</span>
+                            <span id="grandTotalDisplay">0</span>
+                        </div>
+                    </div>
+
+                    <!-- Per Person Display Card -->
+                    <div class="bg-gradient-to-r from-emerald-900/30 to-slate-900/60 p-4 rounded-xl border border-emerald-500/20 flex flex-col justify-center">
+                        <span class="text-xs text-emerald-300 font-medium">每人平均應付 (均分)</span>
+                        <div class="text-2xl sm:text-3xl font-extrabold text-emerald-300 mt-1">
+                            <span class="text-emerald-400 text-xl">$</span>
+                            <span id="perPersonDisplay">0</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Export & Share Buttons -->
+                <div class="mt-4 flex items-center justify-end gap-2">
+                    <button id="copySummaryBtn" class="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-xs font-medium transition flex items-center gap-1.5 border border-slate-700">
+                        <i class="fa-regular fa-copy"></i> 複製結帳文字檔
+                    </button>
+                </div>
+            </div>
+
+        </section>
+    </main>
+
+    <!-- Toast Notification Overlay -->
+    <div id="toast" class="fixed bottom-5 right-5 z-50 bg-indigo-600 text-white px-4 py-2.5 rounded-xl shadow-xl text-xs font-medium flex items-center gap-2 transform translate-y-20 opacity-0 transition-all duration-300 pointer-events-none">
+        <i class="fa-solid fa-circle-check"></i>
+        <span id="toastMsg">成功更新！</span>
+    </div>
+
+    <!-- Application Script -->
+    <script>
+        // Demo Sample Data for Instant Testing
+        const SAMPLE_MENU_ITEMS = [
+            { id: 1, name: '招牌紅燒牛肉麵', price: 180, qty: 2 },
+            { id: 2, name: '原汁清燉牛肉麵', price: 180, qty: 1 },
+            { id: 3, name: '燙青菜 (高麗菜)', price: 45, qty: 2 },
+            { id: 4, name: '滷味拼盤 (豆干+海帶)', price: 60, qty: 1 },
+            { id: 5, name: '古早味冰紅茶 (大杯)', price: 35, qty: 3 }
+        ];
+
+        // Sample menu SVG image data URI generator
+        function generateSampleMenuDataUrl() {
+            const canvas = document.createElement('canvas');
+            canvas.width = 600;
+            canvas.height = 800;
+            const ctx = canvas.getContext('2d');
+
+            // Background
+            ctx.fillStyle = '#1e293b';
+            ctx.fillRect(0, 0, 600, 800);
+
+            // Title Header
+            ctx.fillStyle = '#f8fafc';
+            ctx.font = 'bold 32px sans-serif';
+            ctx.fillText('寶島牛肉麵館 菜單', 150, 70);
+
+            ctx.strokeStyle = '#6366f1';
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.moveTo(50, 95);
+            ctx.lineTo(550, 95);
+            ctx.stroke();
+
+            // Menu Items List Drawing
+            const menuDrawList = [
+                { name: '招牌紅燒牛肉麵', price: '$180' },
+                { name: '原汁清燉牛肉麵', price: '$180' },
+                { name: '燙青菜 (高麗菜)', price: '$45' },
+                { name: '滷味拼盤 (豆干+海帶)', price: '$60' },
+                { name: '古早味冰紅茶 (大杯)', price: '$35' },
+                { name: '鮮肉手工水餃 (10顆)', price: '$80' },
+                { name: '酸辣湯 (小)', price: '$40' }
+            ];
+
+            ctx.font = '20px sans-serif';
+            let y = 160;
+            menuDrawList.forEach((item, index) => {
+                ctx.fillStyle = '#cbd5e1';
+                ctx.fillText(`${index + 1}. ${item.name}`, 60, y);
+                
+                // Dotted line
+                ctx.strokeStyle = '#475569';
+                ctx.lineWidth = 1;
+                ctx.setLineDash([4, 4]);
+                ctx.beginPath();
+                ctx.moveTo(320, y - 5);
+                ctx.lineTo(460, y - 5);
+                ctx.stroke();
+                ctx.setLineDash([]);
+
+                ctx.fillStyle = '#818cf8';
+                ctx.font = 'bold 22px sans-serif';
+                ctx.fillText(item.price, 480, y);
+                y += 80;
+            });
+
+            return canvas.toDataURL('image/png');
+        }
+
+        // Global Application State
+        let items = [];
+        let nextItemId = 1;
+
+        // DOM Element References
+        const fileInput = document.getElementById('fileInput');
+        const dropZone = document.getElementById('dropZone');
+        const uploadPlaceholder = document.getElementById('uploadPlaceholder');
+        const previewContainer = document.getElementById('previewContainer');
+        const menuImage = document.getElementById('menuImage');
+        const loadingOverlay = document.getElementById('loadingOverlay');
+        const ocrStatusBadge = document.getElementById('ocrStatusBadge');
+
+        const itemsTableBody = document.getElementById('itemsTableBody');
+        const emptyItemsState = document.getElementById('emptyItemsState');
+        const addItemBtn = document.getElementById('addItemBtn');
+
+        const serviceChargeSelect = document.getElementById('serviceChargeSelect');
+        const extraFeeInput = document.getElementById('extraFeeInput');
+        const subtotalDisplay = document.getElementById('subtotalDisplay');
+
+        const peopleCountInput = document.getElementById('peopleCountInput');
+        const grandTotalDisplay = document.getElementById('grandTotalDisplay');
+        const perPersonDisplay = document.getElementById('perPersonDisplay');
+
+        const demoBtn = document.getElementById('demoBtn');
+        const resetAllBtn = document.getElementById('resetAllBtn');
+        const copySummaryBtn = document.getElementById('copySummaryBtn');
+
+        // Handle File Selection / Uploading
+        fileInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                processUploadedFile(file);
+            }
+        });
+
+        function processUploadedFile(file) {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                showImagePreview(e.target.result);
+                runMockOCR();
+            };
+            reader.readAsDataURL(file);
+        }
+
+        function showImagePreview(src) {
+            menuImage.src = src;
+            uploadPlaceholder.classList.add('hidden');
+            previewContainer.classList.remove('hidden');
+        }
+
+        // Simulate AI Image Analysis and Extracting Items
+        function runMockOCR() {
+            loadingOverlay.classList.remove('hidden');
+            ocrStatusBadge.classList.add('hidden');
+
+            setTimeout(() => {
+                loadingOverlay.classList.add('hidden');
+                ocrStatusBadge.classList.remove('hidden');
+                
+                // If items are currently empty, auto-fill with detected values
+                if (items.length === 0) {
+                    loadItems(SAMPLE_MENU_ITEMS);
+                    showToast("AI 辨識成功！已自動擷取品項與單價");
+                } else {
+                    showToast("菜單辨識完成！");
+                }
+            }, 1200);
+        }
+
+        // Load items list into app state
+        function loadItems(newItems) {
+            items = newItems.map(item => ({
+                id: nextItemId++,
+                name: item.name,
+                price: Number(item.price) || 0,
+                qty: Number(item.qty) || 0
+            }));
+            renderTable();
+        }
+
+        // Render Order Items Table
+        function renderTable() {
+            itemsTableBody.innerHTML = '';
+
+            if (items.length === 0) {
+                emptyItemsState.classList.remove('hidden');
+            } else {
+                emptyItemsState.classList.add('hidden');
+            }
+
+            items.forEach((item, index) => {
+                const tr = document.createElement('tr');
+                tr.className = "hover:bg-slate-800/40 transition-colors group border-b border-slate-800/40";
+                
+                tr.innerHTML = `
+                    <td class="py-2.5 px-3">
+                        <input type="text" value="${escapeHtml(item.name)}" 
+                            onchange="updateItemName(${item.id}, this.value)"
+                            class="bg-transparent hover:bg-slate-800/80 focus:bg-slate-900 border border-transparent focus:border-indigo-500 rounded px-2 py-1 w-full text-slate-100 focus:outline-none transition">
+                    </td>
+                    <td class="py-2.5 px-3">
+                        <input type="number" value="${item.price}" min="0"
+                            onchange="updateItemPrice(${item.id}, this.value)"
+                            class="bg-transparent hover:bg-slate-800/80 focus:bg-slate-900 border border-transparent focus:border-indigo-500 rounded px-2 py-1 w-full text-slate-100 focus:outline-none transition font-mono">
+                    </td>
+                    <td class="py-2.5 px-3">
+                        <div class="flex items-center justify-center gap-1.5 bg-slate-950/80 p-1 rounded-lg border border-slate-800 w-fit mx-auto">
+                            <button onclick="changeQty(${item.id}, -1)" class="w-6 h-6 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center justify-center font-bold text-xs transition">
+                                <i class="fa-solid fa-minus text-[10px]"></i>
+                            </button>
+                            <span class="w-8 text-center font-bold text-xs text-indigo-400">${item.qty}</span>
+                            <button onclick="changeQty(${item.id}, 1)" class="w-6 h-6 rounded bg-indigo-600 hover:bg-indigo-500 text-white flex items-center justify-center font-bold text-xs transition shadow-sm">
+                                <i class="fa-solid fa-plus text-[10px]"></i>
+                            </button>
+                        </div>
+                    </td>
+                    <td class="py-2.5 px-3 text-right font-mono font-medium text-slate-200">
+                        $${item.price * item.qty}
+                    </td>
+                    <td class="py-2.5 px-3 text-center">
+                        <button onclick="deleteItem(${item.id})" class="text-slate-500 hover:text-rose-400 p-1 transition opacity-80 group-hover:opacity-100">
+                            <i class="fa-regular fa-trash-can"></i>
+                        </button>
+                    </td>
+                `;
+                itemsTableBody.appendChild(tr);
+            });
+
+            calculateTotals();
+        }
+
+        function escapeHtml(text) {
+            return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+        }
+
+        window.updateItemName = function(id, name) {
+            const item = items.find(i => i.id === id);
+            if (item) item.name = name.trim();
+        };
+
+        window.updateItemPrice = function(id, price) {
+            const item = items.find(i => i.id === id);
+            if (item) {
+                item.price = Math.max(0, Number(price) || 0);
+                renderTable();
+            }
+        };
+
+        window.changeQty = function(id, delta) {
+            const item = items.find(i => i.id === id);
+            if (item) {
+                item.qty = Math.max(0, item.qty + delta);
+                renderTable();
+            }
+        };
+
+        window.deleteItem = function(id) {
+            items = items.filter(i => i.id !== id);
+            renderTable();
+            showToast("已刪除該餐點");
+        };
+
+        addItemBtn.addEventListener('click', () => {
+            items.push({
+                id: nextItemId++,
+                name: '新增加餐點',
+                price: 100,
+                qty: 1
+            });
+            renderTable();
+        });
+
+        function calculateTotals() {
+            // Subtotal
+            const subtotal = items.reduce((sum, item) => sum + (item.price * item.qty), 0);
+            subtotalDisplay.textContent = subtotal.toLocaleString();
+
+            // Service Charge / Discount
+            const rate = parseFloat(serviceChargeSelect.value) || 0;
+            const extraFee = parseFloat(extraFeeInput.value) || 0;
+
+            const serviceAmount = Math.round(subtotal * rate);
+            const grandTotal = Math.max(0, subtotal + serviceAmount + extraFee);
+            grandTotalDisplay.textContent = grandTotal.toLocaleString();
+
+            // Split Calculations
+            const people = Math.max(1, parseInt(peopleCountInput.value) || 1);
+            const perPerson = Math.ceil(grandTotal / people);
+            perPersonDisplay.textContent = perPerson.toLocaleString();
+        }
+
+        // Attach listeners to control inputs
+        serviceChargeSelect.addEventListener('change', calculateTotals);
+        extraFeeInput.addEventListener('input', calculateTotals);
+        peopleCountInput.addEventListener('input', calculateTotals);
+
+        // Load Demo Data Action
+        demoBtn.addEventListener('click', () => {
+            const sampleImage = generateSampleMenuDataUrl();
+            showImagePreview(sampleImage);
+            runMockOCR();
+        });
+
+        // Reset All Action
+        resetAllBtn.addEventListener('click', () => {
+            items = [];
+            menuImage.src = '';
+            uploadPlaceholder.classList.remove('hidden');
+            previewContainer.classList.add('hidden');
+            ocrStatusBadge.classList.add('hidden');
+            extraFeeInput.value = 0;
+            serviceChargeSelect.value = 0;
+            peopleCountInput.value = 1;
+            fileInput.value = '';
+            renderTable();
+            showToast("數據已重設");
+        });
+
+        // Copy Summary to Clipboard
+        copySummaryBtn.addEventListener('click', () => {
+            if (items.length === 0) {
+                showToast("無可複製的餐點資料");
+                return;
+            }
+
+            const activeItems = items.filter(i => i.qty > 0);
+            const people = Math.max(1, parseInt(peopleCountInput.value) || 1);
+            const grandTotal = grandTotalDisplay.textContent;
+            const perPerson = perPersonDisplay.textContent;
+
+            let text = `📜 【點餐算帳清單】\n`;
+            text += `--------------------\n`;
+            activeItems.forEach(i => {
+                text += `${i.name} x${i.qty} = $${i.price * i.qty}\n`;
+            });
+            text += `--------------------\n`;
+            text += `💰 總結帳金額：$${grandTotal}\n`;
+            text += `👥 分帳人數：${people} 人\n`;
+            text += `👉 每人平均：$${perPerson}\n`;
+
+            // Use document.execCommand for iframe-friendly copying
+            const tempTextArea = document.createElement('textarea');
+            tempTextArea.value = text;
+            document.body.appendChild(tempTextArea);
+            tempTextArea.select();
+            document.execCommand('copy');
+            document.body.removeChild(tempTextArea);
+
+            showToast("已將分帳明細複製至剪貼簿！");
+        });
+
+        // Toast Helper
+        function showToast(msg) {
+            const toast = document.getElementById('toast');
+            const toastMsg = document.getElementById('toastMsg');
+            toastMsg.textContent = msg;
+            toast.classList.remove('translate-y-20', 'opacity-0');
+            
+            setTimeout(() => {
+                toast.classList.add('translate-y-20', 'opacity-0');
+            }, 2500);
+        }
+
+        // Initialize with default demo menu on boot
+        window.addEventListener('DOMContentLoaded', () => {
+            const sampleImage = generateSampleMenuDataUrl();
+            showImagePreview(sampleImage);
+            loadItems(SAMPLE_MENU_ITEMS);
+            ocrStatusBadge.classList.remove('hidden');
+        });
+    </script>
+</body>
+</html>
